@@ -1,0 +1,139 @@
+import java.io.File
+import kotlin.system.exitProcess
+
+fun main(args: Array<String>) {
+    val options = parseArgs(args)
+    val inputFiles = options.inputFiles
+    val outputFile = options.outputFile
+
+    val lines = mutableListOf<String>()
+    for (file in inputFiles) {
+        try {
+            lines.addAll(File(file).readLines())
+        } catch (e: Exception) {
+            println("Error reading file $file: ${e.message}")
+            exitProcess(1)
+        }
+    }
+
+    val sortedLines = sortLines(lines, options)
+
+    if (outputFile != null) {
+        try {
+            File(outputFile).writeText(sortedLines.joinToString("\n"))
+        } catch (e: Exception) {
+            println("Error writing to file $outputFile: ${e.message}")
+            exitProcess(1)
+        }
+    } else {
+        println(sortedLines.joinToString("\n"))
+    }
+}
+
+data class Options(
+    val inputFiles: List<String>,
+    val outputFile: String? = null,
+    val ignoreCase: Boolean = false,
+    val reverse: Boolean = false,
+    val unique: Boolean = false,
+    val numericSort: Boolean = false,
+    val versionSort: Boolean = false,
+    val batchSize: Int = Int.MAX_VALUE
+)
+
+fun parseArgs(args: Array<String>): Options {
+    val inputFiles = mutableListOf<String>()
+    var outputFile: String? = null
+    var ignoreCase = false
+    var reverse = false
+    var unique = false
+    var numericSort = false
+    var versionSort = false
+    var batchSize = Int.MAX_VALUE
+
+    for (arg in args) {
+        when {
+            arg.startsWith("-o=") -> outputFile = arg.substring(3)
+            arg == "--ignore-case" -> ignoreCase = true
+            arg == "--reverse" -> reverse = true
+            arg == "--unique" -> unique = true
+            arg == "--numeric-sort" -> numericSort = true
+            arg == "--version-sort" -> versionSort = true
+            arg.startsWith("--batch-size=") -> {
+                batchSize = arg.substringAfter("=").toIntOrNull() ?: Int.MAX_VALUE
+                if (batchSize <= 0) {
+                    println("Batch size must be a positive integer.")
+                    exitProcess(1)
+                }
+            }
+            else -> inputFiles.add(arg)
+        }
+    }
+
+    if (inputFiles.isEmpty()) {
+        println("No input files specified.")
+        exitProcess(1)
+    }
+
+    return Options(inputFiles, outputFile, ignoreCase, reverse, unique, numericSort, versionSort, batchSize)
+}
+
+fun sortLines(lines: List<String>, options: Options): List<String> {
+    var output = listOf<String>()
+
+
+    fun sortByVersion(): List<String> {
+        val temporal = mutableListOf<String>()
+        val numberLines = mutableListOf<String>()
+        val textLines = mutableListOf<String>()
+        for (line in lines) {
+            if (line.toDoubleOrNull() != null) {
+                numberLines.add(line)
+            } else {
+                textLines.add(line)
+            }
+        }
+        numberLines.sort()
+        temporal.addAll(numberLines)
+        temporal.addAll(textLines)
+        return temporal
+    }
+    fun sortByNumerical(): List<String> {
+        val temporal = mutableListOf<String>()
+        val numberLines = mutableListOf<Double>()
+        val textLines = mutableListOf<String>()
+        for (line in lines) {
+            if (line.toDoubleOrNull() != null) {
+                numberLines.add(line.toDouble())
+            } else {
+                textLines.add(line)
+            }
+        }
+        numberLines.sort()
+        temporal.addAll(numberLines.map { it.toString() })
+        temporal.addAll(textLines)
+        return temporal
+    }
+    
+    if (options.numericSort) {
+        output = sortByNumerical()
+    } else if (options.versionSort) {
+        output = sortByVersion()
+    } else {
+        output = if (options.ignoreCase) {
+            output.sortedWith(compareBy<String>{ it.lowercase() })
+        } else {
+            output.sorted()
+        }
+    }
+
+    if (options.unique) {
+        output = output.distinct()
+    }
+    if (options.reverse) {
+        output = output.reversed()
+    }
+    return output
+}
+
+
